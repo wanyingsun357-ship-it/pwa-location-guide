@@ -72,7 +72,3 @@ node demo.mjs
 ### PWA 加 iOS 原生壳
 
 这是我的现有实现。原生端用 Core Location 的 `requestLocation()` 取前台位置，获始终授权后用 `startMonitoringSignificantLocationChanges()` 接收后台更新，再走相同的位置上报和距离判定。按采用的定位服务配置用途描述及后台能力。关闭分享时停止监听，服务端同步拒绝上报。锁屏更新由系统调度，验收时检查采集时间和实际回包。[Apple 定位授权](https://developer.apple.com/documentation/corelocation/requesting-authorization-to-use-location-services) · [显著位置变化](https://developer.apple.com/documentation/corelocation/cllocationmanager/startmonitoringsignificantlocationchanges())
-
-## 分享本教程
-
-将本目录的 README 和 demo 放进一个新仓库，X 文案见 [X 草稿](X.md)。发布前用虚构数据录演示，检查截图和提交内容里的地址、坐标、域名、聊天记录及凭据。
