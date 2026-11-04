@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>定位入门测试</title>
+<h1>定位入门测试</h1>
+<p><label>位置令牌 <input id="token" type="password" autocomplete="off"></label></p>
+<button id="sample">上报虚构位置</button>
+<button id="locate">授权并上报本机位置</button>
+<button id="status">查看最近位置和迎接</button>
+<pre id="result" aria-live="polite"></pre>
+<script>
+const token = document.querySelector('#token');
+const result = document.querySelector('#result');
+
+async function call(path, body) {
+  try {
+    const response = await fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: { Authorization: 'Bearer ' + token.value, 'Content-Type': 'application/json' },
+      body: body && JSON.stringify(body),
+    });
+    result.textContent = response.status + '\n' + JSON.stringify(await response.json(), null, 2);
+  } catch (error) {
+    result.textContent = error.message;
+  }
+}
+
+document.querySelector('#sample').onclick = () => call('/api/location', {
+  lat: 0.01, lng: 0.02, acc: 35, capturedAt: new Date().toISOString(),
+});
+document.querySelector('#status').onclick = () => call('/api/status');
+document.querySelector('#locate').onclick = () => {
+  if (!navigator.geolocation) {
+    result.textContent = '请用 HTTPS 打开页面，并确认浏览器支持定位。';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(position => call('/api/location', {
+    lat: position.coords.latitude, lng: position.coords.longitude, acc: position.coords.accuracy,
+    capturedAt: new Date(position.timestamp).toISOString(),
+  }), error => { result.textContent = error.message; }, { timeout: 15000 });
+};
+</script>
+</html>
