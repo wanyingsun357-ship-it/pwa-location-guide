@@ -15,7 +15,18 @@ flowchart LR
     H --> I[手机打开高德打车页]
 ```
 
-## 1. 基础版：用 PWA 上报位置
+| 路线 | 聊天能看到的位置 | 到家迎接 |
+| --- | --- | --- |
+| iOS / Android 纯 PWA | 打开页面或手动刷新后，读取最近一次上报 | 回家打开页面并成功上报后判断 |
+| iOS PWA + 快捷指令 | 默认仍显示最近一次真实上报 | 系统到达事件可以在锁屏时唤醒会话 |
+| Android PWA + Tasker / Automate | 可由自动化 App 在后台更新 | 地理围栏进圈时通知后端 |
+| iOS 原生壳 / Android 定位伴侣 App | 按系统允许的频率更新 | 由后台位置点或系统围栏触发 |
+
+所有路线共用聊天、迎接和高德打车链路。选择背景采集方式前，先把前四节跑通。
+
+## 1. 基础版：iOS 和 Android 共用一个 PWA
+
+iPhone 用 Safari 打开站点，从分享菜单添加到主屏幕。Android 用支持安装 PWA 的浏览器打开站点，从菜单安装或添加到主屏幕。也可以直接在浏览器中测试。两端都先在页面可见时点一次「更新我的位置」，确认系统授权和服务端收到的采集时间。
 
 准备一个 HTTPS PWA、一个私有后端，以及能读取位置状态的聊天服务。这条路线只需浏览器。用户在页面上点「更新我的位置」并授权后，调用 `navigator.geolocation.getCurrentPosition()`。已经开启位置分享的用户也可以选择在打开页面时刷新。需要在页面可见期间跟踪移动时，可使用 `watchPosition()`，离开页面或关闭分享时调用 `clearWatch()`。
 
@@ -61,7 +72,7 @@ node demo.mjs
 
 这条链路产出的是高德打车入口。是否能在高德选择滴滴，取决于页面当前提供的服务商。记录实际下单结果需要另外接入订单能力。[高德 MCP 官方能力与接入](https://developer.amap.com/api/mcp-server/summary)
 
-## 5. 进阶版：锁屏到家也能唤醒会话
+## 5. 保留 PWA，用手机自动化补上锁屏到家
 
 ### PWA 加 iPhone 快捷指令
 
@@ -69,6 +80,38 @@ node demo.mjs
 
 后端需要实现单独的到达事件入口，例如 `POST /api/arrival`。给它分配只允许提交到达事件的凭据。验证凭据后按用户配置选择会话，对重试做去重，并复用迎接冷却和唤醒队列。到达事件只能更新到家状态，最近坐标仍以最后一次真实上报为准。这是可选接法，离线示例只验证距离判定。使用前在自己的设备上试一次锁屏到达，确认动作权限和请求是否成功。[Apple 到达触发器](https://support.apple.com/guide/shortcuts/travel-triggers-apd8ebfc4e8e/ios) · [Apple 自动运行设置](https://support.apple.com/guide/shortcuts/enable-or-disable-a-personal-automation-apd602971e63/ios)
 
-### PWA 加 iOS 原生壳
+### Android 用 Tasker 或 Automate
+
+1. 先配到家围栏。Tasker 建一个位置 Profile，选择家的范围，把进入任务设为 HTTP Request。Automate 可用位置接近判断和 HTTP 请求块串起同一流程。
+2. 向同一个 HTTPS 到达入口发送 POST，请求体用 iPhone 示例里的 arrived_home 事件，凭据仅允许写入事件。后端照样做去重和冷却。锁屏后实际离开再走进围栏，核对聊天里只有一条问候。
+3. 如果还想让聊天看到路上的位置，另建定时任务。Tasker 用 Get Location v2，再用 HTTP Request 将经纬度、精度及采集时间按第 1 节格式发给位置入口，使用可撤销的设备凭据。可以从每 5–10 分钟尝试一次开始，检查真机上的实际更新间隔。定位超时就跳过这次上报。
+4. 按系统提示授权后台定位，检查电池策略。锁屏、低电量、断网和重启后分别测试。Android 后台限频与厂商省电策略会改变触发和采集时间。
+
+[Tasker 定位动作](https://tasker.joaoapps.com/userguide/en/help/ah_get_current_location.html) · [Tasker HTTP 请求](https://tasker.joaoapps.com/userguide/en/help/ah_http_request.html) · [Android 后台定位限制](https://developer.android.com/develop/sensors-and-location/location/battery)
+
+### Android 用 Termux 做脚本试验
+
+安装来源兼容的 Termux 和 Termux:API，再在 Termux 安装 termux-api 命令包。授权后先执行 termux-location 检查本机输出。脚本把有效位置映射到第 1 节的请求体，用 HTTPS POST 上报，失败时退避并保留原采集时间。先手动跑通一次再加循环。唤醒锁和循环都受 Android 后台策略影响，适合调试自定义逻辑。[Termux:API](https://github.com/termux/termux-api)
+
+### iOS 的 Find My 可选实验
+
+pyicloud 可以从私有服务器尝试读取自己已授权的 Find My 设备位置，再把带时间戳的有效点写入同一位置入口。它使用非官方接口，登录可能涉及双重认证及会话续期，设备坐标也可能陈旧或缺失。凭据和会话只保存在本人控制的服务端，公开教程与 PWA 里都只用占位值。这个路径适合实验性读取最近位置，到家触发优先用快捷指令或原生定位。[pyicloud 的 Find My 说明](https://pyicloud.readthedocs.io/en/latest/guides/cli/)
+
+## 6. 原生 App 进阶版
+
+### iOS 原生壳
 
 这是我的现有实现。原生端用 Core Location 的 `requestLocation()` 取前台位置，获始终授权后用 `startMonitoringSignificantLocationChanges()` 接收后台更新，再走相同的位置上报和距离判定。按采用的定位服务配置用途描述及后台能力。关闭分享时停止监听，服务端同步拒绝上报。锁屏更新由系统调度，验收时检查采集时间和实际回包。[Apple 定位授权](https://developer.apple.com/documentation/corelocation/requesting-authorization-to-use-location-services) · [显著位置变化](https://developer.apple.com/documentation/corelocation/cllocationmanager/startmonitoringsignificantlocationchanges())
+
+### Android 定位伴侣 App
+
+聊天界面继续用 PWA。单独做一个轻量 Android App，提供配对、位置分享开关、最近上报时间和错误状态。先在用户打开 App 时获取一次位置。仅需到家迎接时，用 Google Play 服务的 GeofencingClient 注册家的进入围栏，在事件接收端安排后台任务上传。需要出行期间更频繁更新时，由用户在可见页面启动 location 类型前台服务，保留持续通知并提供停止入口。按目标系统版本处理定位权限和启动限制。没有 Google Play 服务的设备要另选兼容的定位和围栏方案。
+
+将签名 APK 安装到自己的测试机后，用下方清单逐项验收。Android 原生接法是可复现设计，本教程仓库提供离线逻辑示例，真机表现需按机型验证。[Android 地理围栏](https://developer.android.com/develop/sensors-and-location/location/geofencing) · [Android 前台服务启动限制](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
+
+## 7. 对照现有效果验收
+
+- 打开 PWA 点刷新，再在聊天问「我在哪」，核对位置和采集时间。拒绝授权、断网或数据过旧时，界面和聊天应说明最后一次上报时间。
+- 锁屏后走出范围再回来。自动化或原生路线应把事件送到指定会话。重发同一事件以及冷却期间重复进圈，只出现一条迎接。纯 PWA 在打开页面并拿到新点后验收。
+- 关闭分享，再尝试用已撤销的凭据上报，后端应拒绝。
+- 用公共地点测试高德搜索和打车链接，确认城市、起终点及唤端正确。是否下单由本人在高德确认。
